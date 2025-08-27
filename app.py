@@ -17,6 +17,18 @@ def main():
     qwen = QwenCLI()
     processor = TextProcessor()
     
+    # Show CLI status
+    if qwen.cli_available:
+        st.success("✅ Qwen Code CLI is available")
+    else:
+        st.info(
+            "ℹ️ Qwen Code CLI not found. Using fallback summarization.\n\n"
+            "For best results, install Qwen Code CLI locally:\n"
+            "```bash\n"
+            "npm i -g @qwen-code/qwen-code\n"
+            "```"
+        )
+    
     # Input section
     col1, col2 = st.columns([2, 1])
     

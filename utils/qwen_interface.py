@@ -6,10 +6,11 @@ import streamlit as st
 
 class QwenCLI:
     def __init__(self):
-        self.check_qwen_installation()
+        # Don't check installation on init to avoid blocking app startup
+        self.cli_available = self._check_cli_availability()
     
-    def check_qwen_installation(self):
-        """Check if Qwen Code CLI is available"""
+    def _check_cli_availability(self):
+        """Check if Qwen Code CLI is available without throwing errors"""
         try:
             subprocess.run(
                 ["qwen-code", "--version"],
@@ -17,34 +18,15 @@ class QwenCLI:
                 capture_output=True,
                 text=True
             )
+            return True
         except (subprocess.CalledProcessError, FileNotFoundError):
-            # Try to install if not found
-            self._install_qwen_code()
-    
-    def _install_qwen_code(self):
-        """Attempt to install Qwen Code CLI"""
-        try:
-            st.info("Installing Qwen Code CLI...")
-            # Install Node.js first if needed
-            subprocess.run(
-                ["curl", "-qL", "https://www.npmjs.com/install.sh", "|", "sh"],
-                shell=True,
-                check=True
-            )
-            # Install Qwen Code
-            subprocess.run(
-                ["npm", "install", "-g", "@qwen-code/qwen-code"],
-                check=True
-            )
-            st.success("Qwen Code CLI installed successfully!")
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to install Qwen Code CLI: {str(e)}\n"
-                "Please install it manually: npm i -g @qwen-code/qwen-code"
-            )
+            return False
     
     def summarize(self, text, max_length=150):
-        """Generate summary using Qwen Code CLI"""
+        """Generate summary using Qwen Code CLI or fallback method"""
+        if not self.cli_available:
+            return self._fallback_summarize(text, max_length)
+        
         prompt = self._create_prompt(text, max_length)
         
         try:
@@ -61,30 +43,30 @@ class QwenCLI:
             return summary
             
         except subprocess.CalledProcessError as e:
-            # Fallback: try with file input
-            return self._summarize_with_file(prompt)
+            # Fallback to alternative method
+            return self._fallback_summarize(text, max_length)
     
-    def _summarize_with_file(self, prompt):
-        """Alternative method using file input"""
-        with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.txt',
-            delete=False
-        ) as f:
-            f.write(prompt)
-            temp_path = f.name
+    def _fallback_summarize(self, text, max_length):
+        """Fallback summarization when Qwen CLI is not available"""
+        st.warning("⚠️ Qwen Code CLI not available. Using basic summarization.")
         
-        try:
-            result = subprocess.run(
-                ["qwen-code", "-f", temp_path],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            return self._parse_output(result.stdout)
-        finally:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
+        # Simple extractive summarization fallback
+        sentences = text.split('.')
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        if not sentences:
+            return "No content to summarize."
+        
+        # Calculate how many sentences to include
+        words_per_sentence = len(text.split()) / len(sentences) if sentences else 20
+        target_sentences = int(max_length / words_per_sentence)
+        target_sentences = max(1, min(target_sentences, len(sentences)))
+        
+        # Take first and most important sentences
+        summary_sentences = sentences[:target_sentences]
+        summary = '. '.join(summary_sentences) + '.'
+        
+        return summary
     
     def _create_prompt(self, text, max_length):
         """Create summarization prompt"""
